@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Log into github.com in the already-running Chrome via CDP.
 
-Credentials are read from the environment:
-  GITHUB_USERNAME  - username or email
-  GITHUB_PASSWORD  - password
-  _2FA_GITHUB      - optional TOTP secret (base32) for two-factor auth
+Two modes, tried in this order:
+
+1. Cookie injection (preferred for social/passkey accounts that have no
+   password). Set GITHUB_SESSION_COOKIE to the value of the `user_session`
+   cookie copied from a browser that is already logged in. Optionally set
+   GITHUB_COOKIES to a JSON object of extra name->value cookies.
+2. Username/password. Set GITHUB_USERNAME and GITHUB_PASSWORD (and, when the
+   account uses an authenticator app, the TOTP secret _2FA_GITHUB).
 
 Usage:
   python3 github_login.py
@@ -13,6 +17,7 @@ The session cookies stay in the browser profile afterwards, so any later
 browsing (manual or scripted) is already authenticated.
 """
 
+import json
 import os
 import sys
 from urllib.parse import urlparse
@@ -39,6 +44,37 @@ def current_user(page) -> str:
     if meta.count() == 0:
         return ""
     return (meta.first.get_attribute("content") or "").strip()
+
+
+def inject_cookies(context) -> None:
+    """Add GitHub session cookies from the environment to the browser context."""
+    session = os.environ.get("GITHUB_SESSION_COOKIE")
+    extra = os.environ.get("GITHUB_COOKIES")
+
+    jar = {}
+    if session:
+        jar["user_session"] = session
+        jar["__Host-user_session_same_site"] = session
+        jar["logged_in"] = "yes"
+    if extra:
+        try:
+            jar.update(json.loads(extra))
+        except json.JSONDecodeError as exc:
+            sys.exit(f"GITHUB_COOKIES is not valid JSON: {exc}")
+
+    cookies = [
+        {
+            "name": name,
+            "value": value,
+            "domain": ".github.com" if not name.startswith("__Host-") else "github.com",
+            "path": "/",
+            "httpOnly": True,
+            "secure": True,
+            "sameSite": "Lax",
+        }
+        for name, value in jar.items()
+    ]
+    context.add_cookies(cookies)
 
 
 def submit_credentials(page, username: str, password: str) -> None:
@@ -98,7 +134,10 @@ def main() -> None:
             if user:
                 print(f"already logged in as {user}")
                 return
-            login(page)
+            if os.environ.get("GITHUB_SESSION_COOKIE") or os.environ.get("GITHUB_COOKIES"):
+                inject_cookies(context)
+            else:
+                login(page)
         except PlaywrightTimeoutError as exc:
             sys.exit(f"timed out during login: {exc}")
 

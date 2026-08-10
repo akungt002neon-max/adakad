@@ -14,14 +14,23 @@ persists in the browser profile for later manual or scripted browsing.
 pip install playwright pyotp
 ```
 
-Environment variables (use existing secrets, never hardcode):
+Environment variables (use existing secrets, never hardcode). The script tries
+cookie injection first, then username/password:
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `GITHUB_USERNAME` | yes | username or email |
-| `GITHUB_PASSWORD` | yes | password |
+| `GITHUB_SESSION_COOKIE` | for cookie mode | value of the `user_session` cookie from a logged-in browser |
+| `GITHUB_COOKIES` | no | JSON object of extra `name->value` cookies to inject |
+| `GITHUB_USERNAME` | for password mode | username or email |
+| `GITHUB_PASSWORD` | for password mode | password |
 | `_2FA_GITHUB` | only if 2FA is enabled | base32 TOTP secret |
 | `CDP_URL` | no | defaults to `http://localhost:29229` |
+
+Cookie mode is the way to authenticate accounts created via social login
+(Google) or passkey, which reject password sign-in with
+"This account does not support password sign-in". Copy the `user_session`
+cookie from DevTools → Application → Cookies → https://github.com on a browser
+that is already logged in.
 
 ## Run
 
