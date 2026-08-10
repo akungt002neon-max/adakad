@@ -15,6 +15,7 @@ browsing (manual or scripted) is already authenticated.
 
 import os
 import sys
+from urllib.parse import urlparse
 
 import pyotp
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -23,6 +24,8 @@ from playwright.sync_api import sync_playwright
 CDP_URL = os.environ.get("CDP_URL", "http://localhost:29229")
 LOGIN_URL = "https://github.com/login"
 TWO_FACTOR_URL_FRAGMENT = "two-factor"
+# A rejected login re-renders the form under /session, not /login.
+FAILED_LOGIN_PATHS = ("/login", "/session")
 
 
 def current_user(page) -> str:
@@ -76,7 +79,8 @@ def login(page) -> None:
             )
         submit_totp(page, totp_secret)
 
-    if "/login" in page.url or TWO_FACTOR_URL_FRAGMENT in page.url:
+    path = urlparse(page.url).path.rstrip("/")
+    if path.endswith(FAILED_LOGIN_PATHS) or TWO_FACTOR_URL_FRAGMENT in page.url:
         error = page.locator(".flash-error, [role='alert']").first
         detail = error.inner_text().strip() if error.count() else "unknown error"
         sys.exit(f"Login failed, still on {page.url}: {detail}")

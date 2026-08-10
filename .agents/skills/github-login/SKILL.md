@@ -40,3 +40,5 @@ logged-in user and exits without touching the login form.
   only for flows that require the web UI.
 - If GitHub asks for a device-verification code sent by email, the script stops
   with an error — that step needs a human.
+- A rejected login lands on `github.com/session` (not `/login`); the script
+  detects that and reports GitHub's flash-error text.
