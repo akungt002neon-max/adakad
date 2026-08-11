@@ -14,12 +14,19 @@ persists in the browser profile for later manual or scripted browsing.
 pip install playwright pyotp
 ```
 
-Environment variables (use existing secrets, never hardcode). The script tries
-cookie injection first, then username/password:
+Environment variables (use existing secrets, never hardcode). Username/password
+is used when both are set; otherwise the script falls back to cookie mode and,
+when run on a terminal without `GITHUB_SESSION_COOKIE`, prompts:
+
+```
+Kirim cookie GitHub kamu (user_session):
+```
+
+The input is hidden (`getpass`), so the cookie never lands in the shell history.
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `GITHUB_SESSION_COOKIE` | for cookie mode | value of the `user_session` cookie from a logged-in browser |
+| `GITHUB_SESSION_COOKIE` | for cookie mode | value of the `user_session` cookie from a logged-in browser; prompted for when unset |
 | `GITHUB_COOKIES` | no | JSON object of extra `name->value` cookies to inject |
 | `GITHUB_USERNAME` | for password mode | username or email |
 | `GITHUB_PASSWORD` | for password mode | password |

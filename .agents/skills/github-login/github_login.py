@@ -3,12 +3,12 @@
 
 Two modes, tried in this order:
 
-1. Cookie injection (preferred for social/passkey accounts that have no
-   password). Set GITHUB_SESSION_COOKIE to the value of the `user_session`
-   cookie copied from a browser that is already logged in. Optionally set
-   GITHUB_COOKIES to a JSON object of extra name->value cookies.
-2. Username/password. Set GITHUB_USERNAME and GITHUB_PASSWORD (and, when the
-   account uses an authenticator app, the TOTP secret _2FA_GITHUB).
+1. Username/password, when GITHUB_USERNAME and GITHUB_PASSWORD are set (plus
+   the TOTP secret _2FA_GITHUB when the account uses an authenticator app).
+2. Cookie injection otherwise — the only option for social/passkey accounts,
+   which have no password. The `user_session` cookie is read from
+   GITHUB_SESSION_COOKIE, or asked for on the terminal when unset. Optionally
+   set GITHUB_COOKIES to a JSON object of extra name->value cookies.
 
 Usage:
   python3 github_login.py
@@ -17,6 +17,7 @@ The session cookies stay in the browser profile afterwards, so any later
 browsing (manual or scripted) is already authenticated.
 """
 
+import getpass
 import json
 import os
 import sys
@@ -31,6 +32,7 @@ LOGIN_URL = "https://github.com/login"
 TWO_FACTOR_URL_FRAGMENT = "two-factor"
 # A rejected login re-renders the form under /session, not /login.
 FAILED_LOGIN_PATHS = ("/login", "/session")
+COOKIE_PROMPT = "Kirim cookie GitHub kamu (user_session): "
 
 
 def current_user(page) -> str:
@@ -46,9 +48,20 @@ def current_user(page) -> str:
     return (meta.first.get_attribute("content") or "").strip()
 
 
-def inject_cookies(context) -> None:
-    """Add GitHub session cookies from the environment to the browser context."""
-    session = os.environ.get("GITHUB_SESSION_COOKIE")
+def read_session_cookie() -> str:
+    """Return the user_session cookie from the environment, or ask for it.
+
+    Prompting only makes sense on a terminal; getpass keeps the value off the
+    screen and out of the shell history.
+    """
+    session = os.environ.get("GITHUB_SESSION_COOKIE", "").strip()
+    if session or not sys.stdin.isatty():
+        return session
+    return getpass.getpass(COOKIE_PROMPT).strip()
+
+
+def inject_cookies(context, session: str) -> None:
+    """Add GitHub session cookies to the browser context."""
     extra = os.environ.get("GITHUB_COOKIES")
 
     jar = {}
@@ -134,10 +147,17 @@ def main() -> None:
             if user:
                 print(f"already logged in as {user}")
                 return
-            if os.environ.get("GITHUB_SESSION_COOKIE") or os.environ.get("GITHUB_COOKIES"):
-                inject_cookies(context)
-            else:
+            if os.environ.get("GITHUB_USERNAME") and os.environ.get("GITHUB_PASSWORD"):
                 login(page)
+            else:
+                session = read_session_cookie()
+                if not session and not os.environ.get("GITHUB_COOKIES"):
+                    sys.exit(
+                        "no credentials: set GITHUB_SESSION_COOKIE (or run "
+                        "interactively to be prompted), or set GITHUB_USERNAME "
+                        "and GITHUB_PASSWORD"
+                    )
+                inject_cookies(context, session)
         except PlaywrightTimeoutError as exc:
             sys.exit(f"timed out during login: {exc}")
 
