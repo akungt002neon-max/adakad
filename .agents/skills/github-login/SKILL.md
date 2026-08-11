@@ -1,0 +1,60 @@
+---
+name: github-login
+description: Log into github.com in the running Chrome browser using Playwright over CDP, including TOTP two-factor. Use when browser-based GitHub access is needed (UI pages that the API cannot cover).
+---
+
+# GitHub browser login
+
+Logs into github.com inside the already-running Chrome instance, so the session
+persists in the browser profile for later manual or scripted browsing.
+
+## Prerequisites
+
+```bash
+pip install playwright pyotp
+```
+
+Environment variables (use existing secrets, never hardcode). Username/password
+is used when both are set; otherwise the script falls back to cookie mode and,
+when run on a terminal without `GITHUB_SESSION_COOKIE`, prompts:
+
+```
+Kirim cookie GitHub kamu (user_session):
+```
+
+The input is hidden (`getpass`), so the cookie never lands in the shell history.
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `GITHUB_SESSION_COOKIE` | for cookie mode | value of the `user_session` cookie from a logged-in browser; prompted for when unset |
+| `GITHUB_COOKIES` | no | JSON object of extra `name->value` cookies to inject |
+| `GITHUB_USERNAME` | for password mode | username or email |
+| `GITHUB_PASSWORD` | for password mode | password |
+| `_2FA_GITHUB` | only if 2FA is enabled | base32 TOTP secret |
+| `CDP_URL` | no | defaults to `http://localhost:29229` |
+
+Cookie mode is the way to authenticate accounts created via social login
+(Google) or passkey, which reject password sign-in with
+"This account does not support password sign-in". Copy the `user_session`
+cookie from DevTools → Application → Cookies → https://github.com on a browser
+that is already logged in.
+
+## Run
+
+```bash
+python3 .agents/skills/github-login/github_login.py
+```
+
+The script is idempotent: if the profile is already authenticated it prints the
+logged-in user and exits without touching the login form.
+
+## Notes
+
+- Attaches to the existing Chrome via CDP; it never launches a new browser, so
+  the Devin browser profile and its cookies are preserved.
+- Prefer `gh` CLI / the REST API with a token for anything scriptable; use this
+  only for flows that require the web UI.
+- If GitHub asks for a device-verification code sent by email, the script stops
+  with an error — that step needs a human.
+- A rejected login lands on `github.com/session` (not `/login`); the script
+  detects that and reports GitHub's flash-error text.
